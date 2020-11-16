@@ -4,11 +4,10 @@ import os
 
 headers = {"Authorization": "Bearer " + os.getenv('BEARER')}
 
-owner = 'SpeciesFileGroup'
-project = 'taxonworks'
+owner = ''
+project = ''
 limit = 100
 output = csv.DictWriter(open("issues.tsv", "w"), delimiter='\t', fieldnames=['number', 'state', 'title', 'body', 'author', 'assignees', 'labels', 'createdAt', 'closedAt', 'comments', 'url'])
-
 issues = []
 
 
@@ -18,56 +17,6 @@ def run_query(query):
         return request.json()
     else:
         raise Exception("Query failed to run by returning code of {}. {}".format(request.status_code, query))
-
-
-cursor = ""
-has_next_page = True
-while has_next_page:
-    query = """
-    {{
-      repository(owner: "{owner}", name: "{project}") {{
-        issues(orderBy: {{field: CREATED_AT, direction: DESC}}, first: {limit}{cursor}) {{
-          pageInfo {{
-            hasNextPage
-            startCursor
-            endCursor
-          }}
-          nodes {{
-            number
-            title
-            body
-            state
-            url
-            labels(first: 100) {{
-              nodes {{
-                name
-              }}
-            }}
-            createdAt
-            closedAt
-            author {{
-              login
-            }}
-            assignees(first: 100) {{
-              nodes {{
-                login
-                name
-              }}
-            }}
-            comments {{
-              totalCount
-            }}
-          }}
-        }}
-      }}
-    }}
-    """.format(owner=owner, project=project, limit=limit, cursor=cursor)
-    results = run_query(query)
-
-    # set pagination cursor
-    has_next_page = results['data']['repository']['issues']['pageInfo']['hasNextPage']
-    cursor = ", after: \"{cursor}\"".format(cursor=results['data']['repository']['issues']['pageInfo']['endCursor'])
-    issues += results['data']['repository']['issues']['nodes']
 
 
 def format_labels(labels):
@@ -95,10 +44,64 @@ def format_body(body):
     return body
 
 
-for i in issues:
-    i['labels'] = format_labels(i['labels']['nodes'])
-    i['assignees'] = format_assignees(i['assignees']['nodes'])
-    i['comments'] = i['comments']['totalCount']
-    i['author'] = i['author']['login']
-    i['body'] = format_body(i['body'])
-    output.writerow(i)
+if __name__ == '__main__':
+
+    cursor = ""
+    has_next_page = True
+    while has_next_page:
+
+        query = """
+        {{
+          repository(owner: "{owner}", name: "{project}") {{
+            issues(orderBy: {{field: CREATED_AT, direction: DESC}}, first: {limit}{cursor}) {{
+              pageInfo {{
+                hasNextPage
+                startCursor
+                endCursor
+              }}
+              nodes {{
+                number
+                title
+                body
+                state
+                url
+                labels(first: 100) {{
+                  nodes {{
+                    name
+                  }}
+                }}
+                createdAt
+                closedAt
+                author {{
+                  login
+                }}
+                assignees(first: 100) {{
+                  nodes {{
+                    login
+                    name
+                  }}
+                }}
+                comments {{
+                  totalCount
+                }}
+              }}
+            }}
+          }}
+        }}
+        """.format(owner=owner, project=project, limit=limit, cursor=cursor)
+
+        results = run_query(query)
+        issues += results['data']['repository']['issues']['nodes']
+
+        # set pagination cursor
+        has_next_page = results['data']['repository']['issues']['pageInfo']['hasNextPage']
+        cursor = ", after: \"{cursor}\"".format(cursor=results['data']['repository']['issues']['pageInfo']['endCursor'])
+
+
+    for i in issues:
+        i['labels'] = format_labels(i['labels']['nodes'])
+        i['assignees'] = format_assignees(i['assignees']['nodes'])
+        i['comments'] = i['comments']['totalCount']
+        i['author'] = i['author']['login']
+        i['body'] = format_body(i['body'])
+        output.writerow(i)
